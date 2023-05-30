@@ -2,10 +2,26 @@ const express = require('express');
 const app = express()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require("dotenv").config();
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 4000
 const cors = require('cors');
 app.use(cors())
 app.use(express.json())
+const varifyJwt = (req, res, next) => {
+  const authorization = req.headers.authorization
+  if (!authorization) {
+    return res.status(401).send({ error: true, message: 'unauthorized access' })
+  }
+  //bearer token
+  const token = authorization.split(' ')[1]
+  jwt.verify(token, process.env.access_token_secreat_key, (err, decoded) => {
+    if (err) {
+      return res.status(403).send({ error: true, message: 'unauthorized access' })
+    }
+    req.decoded = decoded
+    next()
+  })
+}
 
 app.get('/', (req, res) => {
   res.send(`<h1 align="center" style="color:#333;font-size:20px;margin:10px 0;">Bistro Boss Server Is Runnings</h1>`)
@@ -33,6 +49,12 @@ async function run() {
     const reviewsBossCollection = client.db('bistroBossDb').collection('reviews')
     const cartsBossCollection = client.db('bistroBossDb').collection('carts')
 
+    app.post('/jwt', (req, res) => {
+      const user = req.body
+      const token = jwt.sign(user, process.env.access_token_secreat_key, { expiresIn: '1h' })
+      res.send({ token })
+    })
+
     //users related apis
     app.get('/users', async (req, res) => {
       const users = await usersCollection.find({}).toArray()
@@ -40,26 +62,26 @@ async function run() {
     })
 
 
-    app.post('/users',async (req,res) => {
+    app.post('/users', async (req, res) => {
       const user = req.body
       const query = { email: user.email }
       const existingUser = await usersCollection.findOne(query)
       // console.log('existingUser',existingUser);
       if (existingUser) {
-        return res.send({message:'User Has Been Allready Exists!'})
+        return res.send({ message: 'User Has Been Allready Exists!' })
       }
       const result = await usersCollection.insertOne(user)
       res.send(result)
     })
 
-    app.patch('/users/admin/:id',async (req,res) => {
+    app.patch('/users/admin/:id', async (req, res) => {
       const id = req.params.id
-      console.log(id);
-      const filter = {_id:new ObjectId(id)}
-      console.log(filter);
+      // console.log(id);
+      const filter = { _id: new ObjectId(id) }
+      // console.log(filter);
       const updateDoc = {
         $set: {
-          role:'admin'
+          role: 'admin'
         }
       }
       const result = await usersCollection.updateOne(filter, updateDoc)
@@ -92,19 +114,22 @@ async function run() {
 
 
     //carts collections related api
-    app.get('/carts', async (req, res) => {
+    app.get('/carts', varifyJwt, async (req, res) => {
       const email = req.query.email
       // console.log(email);
       if (!email) {
         res.send([])
       }
-      const query={email:email}
+      const decodedEmail = req.decoded.email
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'forbidden access' })
+      }
+      const query = { email: email }
       const result = await cartsBossCollection.find(query).toArray()
       res.send(result)
     })
 
-
-    app.post('/carts',async (req,res) => {
+    app.post('/carts', async (req, res) => {
       const item = req.body
       // console.log(item);
       const carts = await cartsBossCollection.insertOne(item)
@@ -113,7 +138,7 @@ async function run() {
 
 
     app.delete('/carts/:id', async (req, res) => {
-      const id=req.params.id
+      const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await cartsBossCollection.deleteOne(query)
       res.send(result)
