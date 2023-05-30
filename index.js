@@ -28,16 +28,61 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+    const usersCollection = client.db('bistroBossDb').collection('users')
     const bistroBossCollection = client.db('bistroBossDb').collection('bistroMenu')
     const reviewsBossCollection = client.db('bistroBossDb').collection('reviews')
     const cartsBossCollection = client.db('bistroBossDb').collection('carts')
 
+    //users related apis
+    app.get('/users', async (req, res) => {
+      const users = await usersCollection.find({}).toArray()
+      res.send(users)
+    })
+
+
+    app.post('/users',async (req,res) => {
+      const user = req.body
+      const query = { email: user.email }
+      const existingUser = await usersCollection.findOne(query)
+      // console.log('existingUser',existingUser);
+      if (existingUser) {
+        return res.send({message:'User Has Been Allready Exists!'})
+      }
+      const result = await usersCollection.insertOne(user)
+      res.send(result)
+    })
+
+    app.patch('/users/admin/:id',async (req,res) => {
+      const id = req.params.id
+      console.log(id);
+      const filter = {_id:new ObjectId(id)}
+      console.log(filter);
+      const updateDoc = {
+        $set: {
+          role:'admin'
+        }
+      }
+      const result = await usersCollection.updateOne(filter, updateDoc)
+      res.send(result)
+    })
+
+    app.delete('/users/:id', async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await usersCollection.deleteOne(query)
+      res.send(result)
+    })
+
+
+
+    //menu related apis
     app.get('/menu', async (req, res) => {
       const result = await bistroBossCollection.find({}).toArray()
       res.send(result)
     })
 
 
+    // revews related apis
     app.get('/reviews', async (req, res) => {
       const result = await reviewsBossCollection.find({}).toArray()
       res.send(result)
@@ -46,7 +91,7 @@ async function run() {
 
 
 
-    //carts collections
+    //carts collections related api
     app.get('/carts', async (req, res) => {
       const email = req.query.email
       // console.log(email);
