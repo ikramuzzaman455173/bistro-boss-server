@@ -51,12 +51,23 @@ async function run() {
 
     app.post('/jwt', (req, res) => {
       const user = req.body
+      // console.log('user',user);
       const token = jwt.sign(user, process.env.access_token_secreat_key, { expiresIn: '1h' })
       res.send({ token })
     })
 
+    const varifyAdminJwt = async (req, res, next) => {
+      const email = req.decoded.email
+      const query = { email: email }
+      const user = await usersCollection.findOne(query)
+      if (user?.role !== 'admin') {
+        return res.status(403).send({error:true,message:'forbidden message'})
+      }
+      next()
+    }
+
     //users related apis
-    app.get('/users', async (req, res) => {
+    app.get('/users',varifyJwt,varifyAdminJwt, async (req, res) => {
       const users = await usersCollection.find({}).toArray()
       res.send(users)
     })
@@ -71,6 +82,17 @@ async function run() {
         return res.send({ message: 'User Has Been Allready Exists!' })
       }
       const result = await usersCollection.insertOne(user)
+      res.send(result)
+    })
+
+    app.get('/users/admin/:email',varifyJwt,async (req,res) => {
+      const email = req.params.email
+      if (req.decoded.email !== email) {
+        res.send({admin:false})
+      }
+      const query = { email: email }
+      const user = await usersCollection.findOne(query)
+      const result = { admin: user?.role === 'admin' }
       res.send(result)
     })
 
