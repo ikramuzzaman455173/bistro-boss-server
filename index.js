@@ -185,7 +185,7 @@ async function run() {
     // create payments intent
     app.post('/payment',varifyJwt,async (req,res) => {
       const { price } = req.body
-      const amount = price * 100
+      const amount = parseInt(price * 100)
       console.log('price',price,'amount',amount);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
@@ -211,6 +211,97 @@ async function run() {
     })
 
 
+    app.get('/admin-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+      const users = await usersCollection.estimatedDocumentCount()
+      const products = await bistroBossCollection.estimatedDocumentCount()
+      const orders = await paymentsBossCollection.estimatedDocumentCount()
+      const payments = await paymentsBossCollection.find({}).toArray()
+      // console.log(payments, 'payments');
+      // const allPayment = payments.payment
+      // console.log(allPayment);
+      const revenue = payments.reduce((sum, money) => sum + money.payment.price, 0)
+      // console.log(revenue,'revenue');
+      res.send({users,products,orders,revenue})
+    })
+
+    app.get('/order-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+      // Group and aggregate data by menuItems category
+
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'bistroMenu',
+            localField: 'menuItems',
+            foreignField: 'payment._id',
+            as: 'menuItemsData'
+          }
+        },
+        {
+          $unwind: '$menuItemsData'
+        },
+        {
+          $group: {
+            _id: '$menuItemsData.category',
+            count: { $sum: 1 },
+            total: { $sum: '$menuItemsData.price' }
+          }
+        },
+        {
+          $project: {
+            category: '$_id',
+            count: 1,
+            total: { $round: ['$total', 2] },
+            _id: 0
+          }
+        }
+      ];
+
+      // const pipeline = [
+      //   {
+      //   $addFields: {
+      //   menuItemsObjectIds: {
+      //   $map: {
+      //   input: '$menuItems',
+      //   as: 'itemId',
+      //   in: { $toObjectId: '$$itemId' }
+      //   }
+      //   }
+      //   }
+      //   },
+      //   {
+      //   $lookup: {
+      //   from: 'bistroMenu',
+      //   localField: 'menuItemsObjectIds',
+      //   foreignField: 'payment._id',
+      //   as: 'menuItemsData'
+      //   }
+      //   },
+      //   {
+      //   $unwind: '$menuItemsData'
+      //   },
+      //   {
+      //   $group: {
+      //   _id: '$menuItemsData.category',
+      //   count: { $sum: 1 },
+      //   total: { $sum: '$menuItemsData.price' }
+      //   }
+      //   },
+      //   {
+      //   $project: {
+      //   category: '$_id',
+      //   count: 1,
+      //   total: { $round: ['$total', 2] },
+      //   _id: 0
+      //   }
+      //   }
+      //   ];
+
+      // console.log('pipeline',pipeline);
+
+
+      const result = await paymentsBossCollection.aggregate(pipeline).toArray()
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
