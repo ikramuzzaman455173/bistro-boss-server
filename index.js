@@ -2,6 +2,7 @@ const express = require('express');
 const app = express()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require("dotenv").config();
+const stripe = require("stripe")(process.env.payment_secreat_key);
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 4000
 const cors = require('cors');
@@ -48,6 +49,7 @@ async function run() {
     const bistroBossCollection = client.db('bistroBossDb').collection('bistroMenu')
     const reviewsBossCollection = client.db('bistroBossDb').collection('reviews')
     const cartsBossCollection = client.db('bistroBossDb').collection('carts')
+    const paymentsBossCollection = client.db('bistroBossDb').collection('payments')
 
     app.post('/jwt', (req, res) => {
       const user = req.body
@@ -125,6 +127,18 @@ async function run() {
       res.send(result)
     })
 
+    app.post('/menu',varifyJwt,varifyAdminJwt,async (req,res) => {
+      const newItem = req.body
+      const result = await bistroBossCollection.insertOne(newItem)
+      res.send(result)
+    })
+
+    app.delete('/menu/:id',varifyJwt,varifyAdminJwt, async (req, res) => {
+      const id = req.params.id
+      const query = { _id: new ObjectId(id) }
+      const result = await bistroBossCollection.deleteOne(query)
+      res.send(result)
+    })
 
     // revews related apis
     app.get('/reviews', async (req, res) => {
@@ -168,8 +182,126 @@ async function run() {
 
 
 
+    // create payments intent
+    app.post('/payment',varifyJwt,async (req,res) => {
+      const { price } = req.body
+      const amount = parseInt(price * 100)
+      console.log('price',price,'amount',amount);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: 'usd',
+        payment_method_types:['card']
+      })
+      res.send({
+        clientSecret:paymentIntent.client_secret
+      })
+    })
 
 
+    // payment related api
+    app.post('/payments',varifyJwt,async (req,res) => {
+      const payment = req.body
+      const insertResult = await paymentsBossCollection.insertOne(payment)
+
+      // const query = {_id:{$in:payment.cartItems?.map(id => new ObjectId(id)) } }
+      // console.log(payment,'payment');
+      const query = {_id: { $in:payment.payment.cartItems.map(id => new ObjectId(id)) }}
+      const deleteResult= await cartsBossCollection.deleteMany(query)
+      res.send({insertResult,deleteResult})
+    })
+
+
+    app.get('/admin-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+      const users = await usersCollection.estimatedDocumentCount()
+      const products = await bistroBossCollection.estimatedDocumentCount()
+      const orders = await paymentsBossCollection.estimatedDocumentCount()
+      const payments = await paymentsBossCollection.find({}).toArray()
+      // console.log(payments, 'payments');
+      // const allPayment = payments.payment
+      // console.log(allPayment);
+      const revenue = payments.reduce((sum, money) => sum + money.payment.price, 0)
+      // console.log(revenue,'revenue');
+      res.send({users,products,orders,revenue})
+    })
+
+    app.get('/order-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+      // Group and aggregate data by menuItems category
+
+      const pipeline = [
+        {
+          $lookup: {
+            from: 'bistroMenu',
+            localField: 'menuItems',
+            foreignField: 'payment._id',
+            as: 'menuItemsData'
+          }
+        },
+        {
+          $unwind: '$menuItemsData'
+        },
+        {
+          $group: {
+            _id: '$menuItemsData.category',
+            count: { $sum: 1 },
+            total: { $sum: '$menuItemsData.price' }
+          }
+        },
+        {
+          $project: {
+            category: '$_id',
+            count: 1,
+            total: { $round: ['$total', 2] },
+            _id: 0
+          }
+        }
+      ];
+
+      // const pipeline = [
+      //   {
+      //   $addFields: {
+      //   menuItemsObjectIds: {
+      //   $map: {
+      //   input: '$menuItems',
+      //   as: 'itemId',
+      //   in: { $toObjectId: '$$itemId' }
+      //   }
+      //   }
+      //   }
+      //   },
+      //   {
+      //   $lookup: {
+      //   from: 'bistroMenu',
+      //   localField: 'menuItemsObjectIds',
+      //   foreignField: 'payment._id',
+      //   as: 'menuItemsData'
+      //   }
+      //   },
+      //   {
+      //   $unwind: '$menuItemsData'
+      //   },
+      //   {
+      //   $group: {
+      //   _id: '$menuItemsData.category',
+      //   count: { $sum: 1 },
+      //   total: { $sum: '$menuItemsData.price' }
+      //   }
+      //   },
+      //   {
+      //   $project: {
+      //   category: '$_id',
+      //   count: 1,
+      //   total: { $round: ['$total', 2] },
+      //   _id: 0
+      //   }
+      //   }
+      //   ];
+
+      // console.log('pipeline',pipeline);
+
+
+      const result = await paymentsBossCollection.aggregate(pipeline).toArray()
+      res.send(result)
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
