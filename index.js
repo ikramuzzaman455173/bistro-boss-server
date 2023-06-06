@@ -260,47 +260,6 @@ async function run() {
         }
       ];
 
-      // const pipeline = [
-      //   {
-      //   $addFields: {
-      //   menuItemsObjectIds: {
-      //   $map: {
-      //   input: '$menuItems',
-      //   as: 'itemId',
-      //   in: { $toObjectId: '$$itemId' }
-      //   }
-      //   }
-      //   }
-      //   },
-      //   {
-      //   $lookup: {
-      //   from: 'bistroMenu',
-      //   localField: 'menuItemsObjectIds',
-      //   foreignField: 'payment._id',
-      //   as: 'menuItemsData'
-      //   }
-      //   },
-      //   {
-      //   $unwind: '$menuItemsData'
-      //   },
-      //   {
-      //   $group: {
-      //   _id: '$menuItemsData.category',
-      //   count: { $sum: 1 },
-      //   total: { $sum: '$menuItemsData.price' }
-      //   }
-      //   },
-      //   {
-      //   $project: {
-      //   category: '$_id',
-      //   count: 1,
-      //   total: { $round: ['$total', 2] },
-      //   _id: 0
-      //   }
-      //   }
-      //   ];
-
-      // console.log('pipeline',pipeline);
 
 
       const result = await paymentsBossCollection.aggregate(pipeline).toArray()
