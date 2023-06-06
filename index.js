@@ -123,6 +123,10 @@ async function run() {
 
     //menu related apis
     app.get('/menu', async (req, res) => {
+      // const page = parseInt(req.query.page) || 0
+      // const limit = parseInt(req.query.limit) || 10
+      // const skip = page * limit
+      // const result = await bistroBossCollection.find({}).skip(skip).limit(limit).toArray()
       const result = await bistroBossCollection.find({}).toArray()
       res.send(result)
     })
