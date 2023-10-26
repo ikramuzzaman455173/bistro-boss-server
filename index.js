@@ -62,14 +62,14 @@ async function run() {
       const email = req.decoded.email
       const query = { email: email }
       const user = await usersCollection.findOne(query)
-      if (user?.role !== 'admin') {
-        return res.status(403).send({error:true,message:'forbidden message'})
+      if (!user || user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'forbidden message' })
       }
       next()
     }
 
     //users related apis
-    app.get('/users',varifyJwt,varifyAdminJwt, async (req, res) => {
+    app.get('/users', varifyJwt, varifyAdminJwt, async (req, res) => {
       const users = await usersCollection.find({}).toArray()
       res.send(users)
     })
@@ -87,10 +87,10 @@ async function run() {
       res.send(result)
     })
 
-    app.get('/users/admin/:email',varifyJwt,async (req,res) => {
+    app.get('/users/admin/:email', varifyJwt, async (req, res) => {
       const email = req.params.email
       if (req.decoded.email !== email) {
-        res.send({admin:false})
+        res.send({ admin: false })
       }
       const query = { email: email }
       const user = await usersCollection.findOne(query)
@@ -127,13 +127,13 @@ async function run() {
       res.send(result)
     })
 
-    app.post('/menu',varifyJwt,varifyAdminJwt,async (req,res) => {
+    app.post('/menu', varifyJwt, varifyAdminJwt, async (req, res) => {
       const newItem = req.body
       const result = await bistroBossCollection.insertOne(newItem)
       res.send(result)
     })
 
-    app.delete('/menu/:id',varifyJwt,varifyAdminJwt, async (req, res) => {
+    app.delete('/menu/:id', varifyJwt, varifyAdminJwt, async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
       const result = await bistroBossCollection.deleteOne(query)
@@ -183,45 +183,45 @@ async function run() {
 
 
     // create payments intent
-    app.post('/payment',varifyJwt,async (req,res) => {
+    app.post('/payment', varifyJwt, async (req, res) => {
       const { price } = req.body
       const amount = parseInt(price * 100)
-      console.log('price',price,'amount',amount);
+      console.log('price', price, 'amount', amount);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: 'usd',
-        payment_method_types:['card']
+        payment_method_types: ['card']
       })
       res.send({
-        clientSecret:paymentIntent.client_secret
+        clientSecret: paymentIntent.client_secret
       })
     })
 
 
     // payment related api
-    app.post('/payments',varifyJwt,async (req,res) => {
+    app.post('/payments', varifyJwt, async (req, res) => {
       const payment = req.body
       const insertResult = await paymentsBossCollection.insertOne(payment)
 
       // const query = {_id:{$in:payment.cartItems?.map(id => new ObjectId(id)) } }
       // console.log(payment,'payment');
-      const query = {_id: { $in:payment.payment.cartItems.map(id => new ObjectId(id)) }}
-      const deleteResult= await cartsBossCollection.deleteMany(query)
-      res.send({insertResult,deleteResult})
+      const query = { _id: { $in: payment.payment.cartItems.map(id => new ObjectId(id)) } }
+      const deleteResult = await cartsBossCollection.deleteMany(query)
+      res.send({ insertResult, deleteResult })
     })
 
 
-    app.get('/admin-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+    app.get('/admin-stats', varifyJwt, varifyAdminJwt, async (req, res) => {
       const users = await usersCollection.estimatedDocumentCount()
       const products = await bistroBossCollection.estimatedDocumentCount()
       const orders = await paymentsBossCollection.estimatedDocumentCount()
       const payments = await paymentsBossCollection.find({}).toArray()
       const revenue = payments.reduce((sum, money) => sum + money.payment.price, 0)
       // console.log(revenue,'revenue');
-      res.send({users,products,orders,revenue})
+      res.send({ users, products, orders, revenue })
     })
 
-    app.get('/order-stats',varifyJwt,varifyAdminJwt, async (req, res) => {
+    app.get('/order-stats', varifyJwt, varifyAdminJwt, async (req, res) => {
       // Group and aggregate data by menuItems category
 
       const pipeline = [
